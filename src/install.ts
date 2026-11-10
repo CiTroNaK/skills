@@ -1,7 +1,12 @@
 import { existsSync } from 'fs';
 import * as p from '@clack/prompts';
 import { pc } from './color.ts';
-import { getLockedSkillState, readLocalLock } from './local-lock.ts';
+import {
+  getLockedSkillState,
+  PERSONAL_LOCK_FILE,
+  readMergedLocalLock,
+  type LocalSkillLockFile,
+} from './local-lock.ts';
 import { fetchSources, installFromSource, renameSkill } from './add.ts';
 import { runSync, parseSyncOptions } from './sync.ts';
 import { agents, detectInstalledAgents, getUniversalAgents, isUniversalAgent } from './agents.ts';
@@ -40,14 +45,16 @@ export async function resolveRestoreAgents(
 }
 
 /**
- * Install the skills from the local skills-lock.json that are not already in
+ * Install the skills from the local skills-lock.json, merged with the personal
+ * skills-lock.local.json when present, that are not already in
  * .agents/skills/ (all of them with --force) into the agents picked by
  * `resolveRestoreAgents`, honouring each entry's recorded `installMode`.
  * Skills already installed only get the agent links they are missing.
  * Groups skills by source and installs each group. A source that cannot be
  * fetched, or no longer has a locked skill, fails only its own entries: the
  * rest are restored, failed entries keep their lock entries unchanged, and the
- * command ends with a summary and exit code 1.
+ * command ends with a summary and exit code 1. A restored skill is recorded
+ * back into the lock file it came from.
  *
  * node_modules skills are handled via sync.
  */
@@ -57,18 +64,23 @@ export async function runInstallFromLock(args: string[]): Promise<void> {
   const frozen = syncOptions.frozenLockfile ?? isCI();
   const force = args.includes('--force');
   // A v1 lock is rewritten as v2 unless this run must not write the lock
-  const lock = await readLocalLock(cwd, { persistMigration: !frozen && !syncOptions.dryRun });
+  const { lock, personal } = await readMergedLocalLock(cwd, {
+    persistMigration: !frozen && !syncOptions.dryRun,
+  });
   const skillEntries = Object.entries(lock.skills);
+  // Where restored skills come from, for messages
+  const lockLabel =
+    personal.size > 0 ? `skills-lock.json and ${PERSONAL_LOCK_FILE}` : 'skills-lock.json';
 
   if (skillEntries.length === 0) {
     if (frozen) {
       p.log.error(
-        'Cannot install with --frozen-lockfile because skills-lock.json is absent or has no skills'
+        `Cannot install with --frozen-lockfile because skills-lock.json is absent or has no skills (and ${PERSONAL_LOCK_FILE} adds none)`
       );
       process.exitCode = 1;
       return;
     }
-    p.log.warn('No project skills found in skills-lock.json');
+    p.log.warn(`No project skills found in skills-lock.json or ${PERSONAL_LOCK_FILE}`);
     p.log.info(
       `Add project-level skills with ${pc.cyan('npx skills add <package>')} (without ${pc.cyan('-g')})`
     );
@@ -92,7 +104,8 @@ export async function runInstallFromLock(args: string[]): Promise<void> {
   const modifiedSkills: string[] = [];
   // Lock entries that could not be restored; their lock entries are left untouched
   const failedSkills: string[] = [];
-  // Keyed by source, install mode, download, and pinned ref, so copied skills stay copies
+  // Keyed by source, install mode, download, pinned ref, and lock file, so copied
+  // skills stay copies and personal skills stay out of skills-lock.json
   const bySource = new Map<
     string,
     {
@@ -101,6 +114,7 @@ export async function runInstallFromLock(args: string[]): Promise<void> {
       lockedRef?: { ref?: string };
       copy: boolean;
       download: boolean;
+      inPersonalLock: boolean;
       /** Lock keys: the installed names. */
       skills: string[];
       /** Installed names per lowercased source name; a renamed skill differs from its source name. */
@@ -110,6 +124,13 @@ export async function runInstallFromLock(args: string[]): Promise<void> {
 
   for (const [skillName, entry] of skillEntries) {
     if (entry.sourceType === 'node_modules') {
+      // Sync installs what package.json provides and records it in the shared lock
+      if (personal.has(skillName)) {
+        p.log.warn(
+          `Skipped ${pc.cyan(skillName)}: skills from node_modules come from package.json, not ${PERSONAL_LOCK_FILE}`
+        );
+        continue;
+      }
       nodeModuleSkills.push(skillName);
       continue;
     }
@@ -139,12 +160,14 @@ export async function runInstallFromLock(args: string[]): Promise<void> {
     }
     const copy = entry.installMode === 'copy';
     const download = entry.sourceType === 'download';
-    const key = `${copy ? 'copy' : 'symlink'}:${download ? 'download' : 'source'}:${installSource}\n${pinned ? (entry.ref ?? '') : ''}`;
+    const inPersonalLock = personal.has(skillName);
+    const key = `${copy ? 'copy' : 'symlink'}:${download ? 'download' : 'source'}:${inPersonalLock ? 'personal' : 'shared'}:${installSource}\n${pinned ? (entry.ref ?? '') : ''}`;
     const group = bySource.get(key) ?? {
       source: installSource,
       ...(pinned && { lockedRef: { ref: entry.ref } }),
       copy,
       download,
+      inPersonalLock,
       skills: [] as string[],
       installNames: new Map<string, string[]>(),
     };
@@ -162,14 +185,17 @@ export async function runInstallFromLock(args: string[]): Promise<void> {
 
   if (modifiedSkills.length > 0) {
     p.log.warn(
-      `${modifiedSkills.map((name) => pc.cyan(name)).join(', ')} ${modifiedSkills.length === 1 ? 'does' : 'do'} not match skills-lock.json; ${syncOptions.dryRun ? 'would restore' : 'restoring'} the locked version`
+      `${modifiedSkills.map((name) => pc.cyan(name)).join(', ')} ${modifiedSkills.length === 1 ? 'does' : 'do'} not match ${lockLabel}; ${syncOptions.dryRun ? 'would restore' : 'restoring'} the locked version`
     );
   }
 
-  const remoteCount = skillEntries.length - nodeModuleSkills.length - alreadyInstalled.length;
+  const remoteCount = [...bySource.values()].reduce(
+    (count, { skills }) => count + skills.length,
+    failedSkills.length
+  );
   if (remoteCount > 0) {
     p.log.info(
-      `${syncOptions.dryRun ? 'Would restore' : 'Restoring'} ${pc.cyan(String(remoteCount))} skill${remoteCount !== 1 ? 's' : ''} from skills-lock.json into ${pc.dim('.agents/skills/')}`
+      `${syncOptions.dryRun ? 'Would restore' : 'Restoring'} ${pc.cyan(String(remoteCount))} skill${remoteCount !== 1 ? 's' : ''} from ${lockLabel} into ${pc.dim('.agents/skills/')}`
     );
   }
   if (linkedAgents.length > 0 && (remoteCount > 0 || alreadyInstalled.length > 0)) {
@@ -191,10 +217,11 @@ export async function runInstallFromLock(args: string[]): Promise<void> {
 
   // Download every source at once, then install them in order
   const requests = [...bySource.values()].map(
-    ({ source, lockedRef, copy, download, skills, installNames }) => ({
+    ({ source, lockedRef, copy, download, inPersonalLock, skills, installNames }) => ({
       source,
       lockedRef,
       copy,
+      inPersonalLock,
       parsed: download ? { type: 'download' as const, url: source } : parseSource(source),
       // Fetch renamed skills by the name their source uses
       skills: skills.map((name) => lock.skills[name]?.skillName ?? name),
@@ -208,7 +235,15 @@ export async function runInstallFromLock(args: string[]): Promise<void> {
   let restoredCount = 0;
   for (const [
     index,
-    { source, lockedRef, copy, skills: sourceNames, lockKeys: skills, installNames },
+    {
+      source,
+      lockedRef,
+      copy,
+      inPersonalLock,
+      skills: sourceNames,
+      lockKeys: skills,
+      installNames,
+    },
   ] of requests.entries()) {
     const fetchedSource = fetched[index]!;
     // Fetched at the locked commit; the lock keeps tracking the branch or tag it came from.
@@ -229,6 +264,7 @@ export async function runInstallFromLock(args: string[]): Promise<void> {
         }),
         agents: targetAgents,
         ...(copy && { installMode: 'copy' as const }),
+        ...(inPersonalLock && { lockFile: PERSONAL_LOCK_FILE }),
         ...(frozen && { frozenLock: lock }),
       }
     );
@@ -280,7 +316,7 @@ export async function runInstallFromLock(args: string[]): Promise<void> {
         ? `Restored ${restoredCount} skill${restoredCount !== 1 ? 's' : ''}; failed`
         : 'Failed';
     p.log.error(
-      `${restored} to restore ${failedSkills.length} skill${failedSkills.length !== 1 ? 's' : ''} from skills-lock.json: ${failedSkills.map((name) => pc.cyan(name)).join(', ')}`
+      `${restored} to restore ${failedSkills.length} skill${failedSkills.length !== 1 ? 's' : ''} from ${lockLabel}: ${failedSkills.map((name) => pc.cyan(name)).join(', ')}`
     );
     process.exitCode = 1;
   }
@@ -293,7 +329,7 @@ export async function runInstallFromLock(args: string[]): Promise<void> {
  */
 async function linkInstalledSkills(
   skillNames: string[],
-  lock: Awaited<ReturnType<typeof readLocalLock>>,
+  lock: LocalSkillLockFile,
   targetAgents: AgentType[],
   cwd: string
 ): Promise<void> {

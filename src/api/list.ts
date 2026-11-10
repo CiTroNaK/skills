@@ -1,5 +1,5 @@
 import { listInstalledSkills } from '../installer.ts';
-import { readLocalLock } from '../local-lock.ts';
+import { readMergedLocalLock } from '../local-lock.ts';
 import { readSkillLock } from '../skill-lock.ts';
 import { assertKnownAgents, resolveConfig } from './config.ts';
 import { diagnostics } from '../diagnostics.ts';
@@ -31,7 +31,10 @@ async function list(options: ListOptions): Promise<ListResult> {
   options.signal?.throwIfAborted();
 
   const locked: Record<Scope, Record<string, LockedSkill>> = {
-    project: scope === 'global' ? {} : await lockedSkills(() => readLocalLock(cwd)),
+    project:
+      scope === 'global'
+        ? {}
+        : await lockedSkills(async () => (await readMergedLocalLock(cwd)).lock),
     global: scope === 'project' ? {} : await lockedSkills(readSkillLock),
   };
 

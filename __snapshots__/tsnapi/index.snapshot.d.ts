@@ -266,6 +266,10 @@ export declare const diagnostics: Omit<import("nostics").Diagnostics<{
       example: string;
     }) => string;
   };
+  readonly SKILLS_LOCAL_WITH_GLOBAL: {
+    readonly why: "Cannot combine --local with --global.";
+    readonly fix: "Local skills are recorded in the project skills-lock.local.json. Drop --global, or drop --local to install globally.";
+  };
   readonly SKILLS_PROMPT_REQUIRES_TTY: {
     readonly why: string;
   };
@@ -493,6 +497,16 @@ export declare const diagnostics: Omit<import("nostics").Diagnostics<{
       path: string;
     }) => string;
   };
+  readonly SKILLS_REMOVE_KEPT_SHARED_ENTRY: {
+    readonly why: (p: {
+      skill: string;
+    }) => string;
+  };
+  readonly SKILLS_LOCAL_LOCK_IGNORED: {
+    readonly why: (p: {
+      detail: string;
+    }) => string;
+  };
   readonly SKILLS_SYMLINK_OUTSIDE_SKILL: {
     readonly why: (p: {
       path: string;
@@ -708,14 +722,14 @@ export declare const diagnostics: Omit<import("nostics").Diagnostics<{
     }) => string;
   };
 }, readonly import("nostics").AnyDiagnosticReporter[], import("nostics").InferCodesData>, "is"> & {
-  is: (error: unknown) => error is Diagnostic$1<undefined, "SKILLS_ARCHIVE_UNSAFE_PATH"> | Diagnostic$1<undefined, "SKILLS_ARCHIVE_ENCRYPTED_ENTRY"> | Diagnostic$1<undefined, "SKILLS_ARCHIVE_LINK_ENTRY"> | Diagnostic$1<undefined, "SKILLS_ARCHIVE_TOO_MANY_FILES"> | Diagnostic$1<undefined, "SKILLS_ARCHIVE_TOO_LARGE"> | Diagnostic$1<undefined, "SKILLS_UNSUPPORTED_GIT_TRANSPORT"> | Diagnostic$1<undefined, "SKILLS_GIT_CLONE_TIMEOUT"> | Diagnostic$1<undefined, "SKILLS_GIT_AUTH_FAILED"> | Diagnostic$1<undefined, "SKILLS_GIT_SAML_SSO_BLOCKED"> | Diagnostic$1<undefined, "SKILLS_GIT_CLONE_FAILED"> | Diagnostic$1<undefined, "SKILLS_INVALID_AGENTS"> | Diagnostic$1<undefined, "SKILLS_OPTION_REQUIRES_VALUE"> | Diagnostic$1<undefined, "SKILLS_OPTION_TAKES_NO_VALUE"> | Diagnostic$1<undefined, "SKILLS_UNKNOWN_OPTION"> | Diagnostic$1<undefined, "SKILLS_INVALID_OPTION_VALUE"> | Diagnostic$1<undefined, "SKILLS_DUPLICATE_OPTION"> | Diagnostic$1<undefined, "SKILLS_REMOVE_ALL_WITH_NAMES"> | Diagnostic$1<undefined, "SKILLS_PROMPT_REQUIRES_TTY"> | Diagnostic$1<undefined, "SKILLS_MISSING_ARGUMENT"> | Diagnostic$1<undefined, "SKILLS_MULTIPLE_SOURCES"> | Diagnostic$1<undefined, "SKILLS_UNKNOWN_COMMAND"> | Diagnostic$1<undefined, "SKILLS_REMOVE_GLOBALLY_TRACKED"> | Diagnostic$1<undefined, "SKILLS_REMOVE_UNTRACKED_SKIPPED"> | Diagnostic$1<undefined, "SKILLS_REMOVE_UNMANAGED_DIR_KEPT"> | Diagnostic$1<undefined, "SKILLS_UNSAFE_SUBPATH"> | Diagnostic$1<undefined, "SKILLS_SUBPATH_OUTSIDE_REPO"> | Diagnostic$1<undefined, "SKILLS_NO_MATCHING_SKILLS"> | Diagnostic$1<undefined, "SKILLS_NO_VALID_SKILLS"> | Diagnostic$1<undefined, "SKILLS_MULTIPLE_SKILLS_IN_SOURCE"> | Diagnostic$1<undefined, "SKILLS_RENAME_MULTIPLE_SKILLS"> | Diagnostic$1<undefined, "SKILLS_AMBIGUOUS_SKILL_SELECTOR"> | Diagnostic$1<undefined, "SKILLS_CONFLICTING_SKILL_SELECTORS"> | Diagnostic$1<undefined, "SKILLS_LOCAL_PATH_NOT_FOUND"> | Diagnostic$1<undefined, "SKILLS_WELLKNOWN_SCOPE_NOT_FOUND"> | Diagnostic$1<undefined, "SKILLS_WELLKNOWN_DIGEST_MISMATCH"> | Diagnostic$1<undefined, "SKILLS_WELLKNOWN_FILE_FETCH_FAILED"> | Diagnostic$1<undefined, "SKILLS_WELLKNOWN_INDEX_NOT_FOUND"> | Diagnostic$1<{
+  is: (error: unknown) => error is Diagnostic$1<undefined, "SKILLS_ARCHIVE_UNSAFE_PATH"> | Diagnostic$1<undefined, "SKILLS_ARCHIVE_ENCRYPTED_ENTRY"> | Diagnostic$1<undefined, "SKILLS_ARCHIVE_LINK_ENTRY"> | Diagnostic$1<undefined, "SKILLS_ARCHIVE_TOO_MANY_FILES"> | Diagnostic$1<undefined, "SKILLS_ARCHIVE_TOO_LARGE"> | Diagnostic$1<undefined, "SKILLS_UNSUPPORTED_GIT_TRANSPORT"> | Diagnostic$1<undefined, "SKILLS_GIT_CLONE_TIMEOUT"> | Diagnostic$1<undefined, "SKILLS_GIT_AUTH_FAILED"> | Diagnostic$1<undefined, "SKILLS_GIT_SAML_SSO_BLOCKED"> | Diagnostic$1<undefined, "SKILLS_GIT_CLONE_FAILED"> | Diagnostic$1<undefined, "SKILLS_INVALID_AGENTS"> | Diagnostic$1<undefined, "SKILLS_OPTION_REQUIRES_VALUE"> | Diagnostic$1<undefined, "SKILLS_OPTION_TAKES_NO_VALUE"> | Diagnostic$1<undefined, "SKILLS_UNKNOWN_OPTION"> | Diagnostic$1<undefined, "SKILLS_INVALID_OPTION_VALUE"> | Diagnostic$1<undefined, "SKILLS_DUPLICATE_OPTION"> | Diagnostic$1<undefined, "SKILLS_REMOVE_ALL_WITH_NAMES"> | Diagnostic$1<undefined, "SKILLS_LOCAL_WITH_GLOBAL"> | Diagnostic$1<undefined, "SKILLS_PROMPT_REQUIRES_TTY"> | Diagnostic$1<undefined, "SKILLS_MISSING_ARGUMENT"> | Diagnostic$1<undefined, "SKILLS_MULTIPLE_SOURCES"> | Diagnostic$1<undefined, "SKILLS_UNKNOWN_COMMAND"> | Diagnostic$1<undefined, "SKILLS_REMOVE_GLOBALLY_TRACKED"> | Diagnostic$1<undefined, "SKILLS_REMOVE_UNTRACKED_SKIPPED"> | Diagnostic$1<undefined, "SKILLS_REMOVE_UNMANAGED_DIR_KEPT"> | Diagnostic$1<undefined, "SKILLS_UNSAFE_SUBPATH"> | Diagnostic$1<undefined, "SKILLS_SUBPATH_OUTSIDE_REPO"> | Diagnostic$1<undefined, "SKILLS_NO_MATCHING_SKILLS"> | Diagnostic$1<undefined, "SKILLS_NO_VALID_SKILLS"> | Diagnostic$1<undefined, "SKILLS_MULTIPLE_SKILLS_IN_SOURCE"> | Diagnostic$1<undefined, "SKILLS_RENAME_MULTIPLE_SKILLS"> | Diagnostic$1<undefined, "SKILLS_AMBIGUOUS_SKILL_SELECTOR"> | Diagnostic$1<undefined, "SKILLS_CONFLICTING_SKILL_SELECTORS"> | Diagnostic$1<undefined, "SKILLS_LOCAL_PATH_NOT_FOUND"> | Diagnostic$1<undefined, "SKILLS_WELLKNOWN_SCOPE_NOT_FOUND"> | Diagnostic$1<undefined, "SKILLS_WELLKNOWN_DIGEST_MISMATCH"> | Diagnostic$1<undefined, "SKILLS_WELLKNOWN_FILE_FETCH_FAILED"> | Diagnostic$1<undefined, "SKILLS_WELLKNOWN_INDEX_NOT_FOUND"> | Diagnostic$1<{
     path: string;
   }, "SKILLS_SKILL_SKIPPED"> | Diagnostic$1<undefined, "SKILLS_DOWNLOAD_HTTP_ERROR"> | Diagnostic$1<undefined, "SKILLS_DOWNLOAD_TOO_LARGE"> | Diagnostic$1<undefined, "SKILLS_DOWNLOAD_NO_BODY"> | Diagnostic$1<undefined, "SKILLS_DOWNLOAD_EMPTY"> | Diagnostic$1<undefined, "SKILLS_DOWNLOAD_NOT_A_SKILL"> | Diagnostic$1<undefined, "SKILLS_DOWNLOAD_NOT_LOCKED"> | Diagnostic$1<undefined, "SKILLS_ARCHIVE_INVALID"> | Diagnostic$1<undefined, "SKILLS_ARCHIVE_MULTI_DISK_ZIP"> | Diagnostic$1<undefined, "SKILLS_ARCHIVE_UNSUPPORTED_COMPRESSION"> | Diagnostic$1<undefined, "SKILLS_ARCHIVE_UNSUPPORTED_FORMAT"> | Diagnostic$1<undefined, "SKILLS_ARCHIVE_MISSING_SKILL_MD"> | Diagnostic$1<undefined, "SKILLS_WELLKNOWN_ARCHIVE_UNSAFE_PATH"> | Diagnostic$1<undefined, "SKILLS_WELLKNOWN_ARCHIVE_TOO_LARGE"> | Diagnostic$1<undefined, "SKILLS_WELLKNOWN_ARCHIVE_TOO_MANY_FILES"> | Diagnostic$1<undefined, "SKILLS_UNSAFE_SKILL_NAME"> | Diagnostic$1<{
     path: string;
     skills: string[];
   }, "SKILLS_CATEGORY_DIR_CONFLICT"> | Diagnostic$1<undefined, "SKILLS_CLEANUP_OUTSIDE_TEMP_DIR"> | Diagnostic$1<{
     path: string;
-  }, "SKILLS_BROKEN_SYMLINK"> | Diagnostic$1<undefined, "SKILLS_LOCK_MISSING_SOURCE_URL"> | Diagnostic$1<undefined, "SKILLS_INVALID_LOCAL_LOCK"> | Diagnostic$1<undefined, "SKILLS_LOCAL_LOCK_BUSY"> | Diagnostic$1<{
+  }, "SKILLS_BROKEN_SYMLINK"> | Diagnostic$1<undefined, "SKILLS_LOCK_MISSING_SOURCE_URL"> | Diagnostic$1<undefined, "SKILLS_INVALID_LOCAL_LOCK"> | Diagnostic$1<undefined, "SKILLS_LOCAL_LOCK_BUSY"> | Diagnostic$1<undefined, "SKILLS_REMOVE_KEPT_SHARED_ENTRY"> | Diagnostic$1<undefined, "SKILLS_LOCAL_LOCK_IGNORED"> | Diagnostic$1<{
     path: string;
   }, "SKILLS_SYMLINK_OUTSIDE_SKILL"> | Diagnostic$1<{
     path: string;
