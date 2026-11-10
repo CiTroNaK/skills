@@ -1,0 +1,184 @@
+# Fork-only: keeps main rebased on vercel-labs/skills and publishes an npx-able tarball.
+#
+# Requires the FORK_SYNC_TOKEN secret: a fine-grained PAT for this repo with
+# Contents: write and Workflows: write (GITHUB_TOKEN cannot push commits that touch
+# .github/workflows, and every rebase rewrites them).
+#
+# Run the latest release with:
+#   npx https://github.com/CiTroNaK/skills/releases/latest/download/skills.tgz <command>
+
+name: Fork sync
+
+on:
+  schedule:
+    - cron: '23 5 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: fork-sync
+  cancel-in-progress: false
+
+env:
+  UPSTREAM: https://github.com/vercel-labs/skills.git
+  # gh would otherwise prefer a remote named upstream and act on vercel-labs/skills
+  GH_REPO: ${{ github.repository }}
+  NOTIFY: '@CiTroNaK'
+  ISSUE_TITLE: Fork sync failed
+
+jobs:
+  sync:
+    if: github.repository == 'CiTroNaK/skills'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v6
+        with:
+          ref: main
+          fetch-depth: 0
+          token: ${{ secrets.FORK_SYNC_TOKEN }}
+
+      - name: Rebase on upstream
+        id: rebase
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git remote add vercel "$UPSTREAM"
+          git fetch --no-tags vercel main
+
+          before=$(git rev-parse HEAD)
+          echo "before=$before" >> "$GITHUB_OUTPUT"
+
+          if ! git rebase vercel/main; then
+            {
+              echo "commit=$(git log -1 --format='%h %s' REBASE_HEAD)"
+              echo "conflicts<<EOF"
+              git diff --name-only --diff-filter=U
+              echo "EOF"
+            } >> "$GITHUB_OUTPUT"
+            git rebase --abort
+            exit 1
+          fi
+
+          echo "changed=$([ "$(git rev-parse HEAD)" != "$before" ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+
+      - name: Compute release tag
+        id: tag
+        run: |
+          version="$(node -p 'require("./package.json").version')-local.$(git rev-parse --short HEAD)"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=v$version" >> "$GITHUB_OUTPUT"
+          if gh release view "v$version" > /dev/null 2>&1; then
+            echo "released=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "released=false" >> "$GITHUB_OUTPUT"
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup pnpm
+        if: steps.tag.outputs.released == 'false'
+        uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
+
+      - name: Setup Node
+        if: steps.tag.outputs.released == 'false'
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: pnpm
+
+      - name: Build and test
+        id: verify
+        if: steps.tag.outputs.released == 'false'
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm build
+          pnpm type-check
+          pnpm test --run
+
+      - name: Push rebased main
+        if: steps.rebase.outputs.changed == 'true'
+        run: git push --force-with-lease=main:${{ steps.rebase.outputs.before }} origin HEAD:main
+
+      - name: Publish release
+        if: steps.tag.outputs.released == 'false'
+        run: |
+          npm version "$VERSION" --no-git-tag-version
+          pnpm pack
+          cp "skills-$VERSION.tgz" skills.tgz
+          git checkout package.json
+
+          base=$(git rev-parse --short vercel/main)
+          prev=$(gh release list --limit 1 --json tagName --jq '.[0].tagName // empty')
+          {
+            echo "$NOTIFY new build of the fork, on top of upstream \`$base\`."
+            echo
+            echo '```bash'
+            echo "npx https://github.com/$GITHUB_REPOSITORY/releases/download/$TAG/skills-$VERSION.tgz <command>"
+            echo '```'
+            echo
+            echo "### Fork commits"
+            git log --format='- %h %s' vercel/main..HEAD
+            if [ -n "$prev" ] && git fetch --quiet origin "refs/tags/$prev:refs/tags/$prev"; then
+              echo
+              echo "### Upstream changes since $prev"
+              git log --format='- %h %s' "$(git merge-base "$prev" vercel/main)..vercel/main"
+            fi
+          } > notes.md
+
+          gh release create "$TAG" "skills-$VERSION.tgz" skills.tgz \
+            --target "$(git rev-parse HEAD)" --title "$TAG" --notes-file notes.md --latest
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.tag.outputs.version }}
+          TAG: ${{ steps.tag.outputs.tag }}
+
+      - name: Close failure issue
+        if: success()
+        run: |
+          for n in $(gh issue list --state open --search "in:title \"$ISSUE_TITLE\"" --json number --jq '.[].number'); do
+            gh issue close "$n" --comment "Resolved by $RUN_URL"
+          done
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
+      - name: Report failure
+        if: failure()
+        run: |
+          {
+            echo "$NOTIFY fork sync failed at **$STAGE**."
+            echo
+            echo "Run: $RUN_URL"
+            if [ "$STAGE" = rebase ]; then
+              echo
+              echo "Conflicting commit: \`$COMMIT\`"
+              echo
+              echo "Files:"
+              printf '%s\n' "$CONFLICTS" | sed 's/^/- `/; s/$/`/'
+              echo
+              echo "Resolve locally:"
+              echo '```bash'
+              echo 'git fetch upstream && git rebase upstream/main'
+              echo '# fix conflicts, git rebase --continue'
+              echo 'git push --force-with-lease origin main'
+              echo '```'
+            fi
+          } > body.md
+
+          existing=$(gh issue list --state open --search "in:title \"$ISSUE_TITLE\"" --json number --jq '.[0].number // empty')
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" --body-file body.md
+          else
+            gh issue create --title "$ISSUE_TITLE" --body-file body.md
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          STAGE: ${{ steps.rebase.outcome == 'failure' && 'rebase' || steps.verify.outcome == 'failure' && 'build and test' || 'setup, push or release' }}
+          COMMIT: ${{ steps.rebase.outputs.commit }}
+          CONFLICTS: ${{ steps.rebase.outputs.conflicts }}
